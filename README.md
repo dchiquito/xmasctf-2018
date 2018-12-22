@@ -62,6 +62,9 @@ Practically speaking, the smallest values of `x` and `y` I could easily find wer
 
 Now that we know `N`, we can encrypt anything we want without using the server. We will now pick an arbitrary `S` (I used `N/2`), then use the above blinding attack to decrypt the encrypted ciphertext. See `/santaslist/santaslist_solve.py` for my solution.
 
+# Santa's List 2.0
+
+Reading the source provided in Santa's List 2.0, the only difference is that there is a limit of 5 requests to the server. Fortunately, our previous solution only requires 3 requests: 2 for encrypting '!' and '#', and 1 for decrypting the modified ciphertext. See the above solution.
 
 # A Weird List of Sequences
 

@@ -20,7 +20,6 @@ if __name__ == "__main__":
 	captcha.handleClient(client)
 	for i in range(0,25):
 		seq = readSequence(client)
-		#seq = ['88', '169', '286', '484', '598', '682', '808', '844', '897', '961', '1339', '1573', '1599', '1878', '1986', '2266', '2488', '2626', '2662', '2743', '2938', '3193', '3289', '3751', '3887', '4084', '4444', '4642', '4738', '4804']
 		print "Sequence",seq
 		next_up = lookupSequence(seq)
 		print "Next up",next_up

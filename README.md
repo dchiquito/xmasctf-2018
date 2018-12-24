@@ -1,5 +1,202 @@
 # x-mas-ctf
 
+# Probably Really Nice Goodies from Santa
+
+Just reading the title, we can see a certain acronym looming: PRNG, or Pseudo-Random Number Generator. Inside the provided .zip file are two files, `flag.enc` and `Probably Really Nice Goodies from Santa.py`. The python file is relatively concise:
+
+    import os
+    
+    flag = open('flag.txt').read().strip()
+    
+    class PRNG():
+            def __init__(self):
+                    self.seed = self.getseed()
+                    self.iv = int(bin(self.seed)[2:].zfill(64)[0:32], 2)
+                    self.key = int(bin(self.seed)[2:].zfill(64)[32:64], 2)
+                    self.mask = int(bin(self.seed)[2:].zfill(64)[64:96], 2)
+                    self.aux = 0
+    
+            def parity(self,x):
+                    x ^= x >> 16
+                    x ^= x >> 8
+                    x ^= x>> 4
+                    x ^= x>> 2
+                    x ^= x>> 1
+                    return x & 1
+    
+            def getseed(self):
+                    return int(os.urandom(12).encode('hex'), 16)
+    
+            def LFSR(self):
+                    return self.iv >> 1 | (self.parity(self.iv&self.key) << 32)
+    
+            def next(self):
+                    self.aux, self.iv = self.iv, self.LFSR()
+    
+            def next_byte(self):
+                    x = self.iv ^ self.mask
+                    self.next()
+                    x ^= x >> 16
+                    x ^= x >> 8
+                    return (x & 255)
+    
+    def encrypt(s):
+        o=''
+        for x in s:
+            o += chr(ord(x) ^ p.next_byte())
+        return o.encode('hex')
+    
+    p=PRNG()
+    
+    with open('flag.enc','w') as f:
+        f.write(encrypt(flag))
+
+There are three basic parts to this program: the PRNG class which seems to involve a lot of bitwise arithmetic, the encrypt method which seems to encrypt a string, the bits of code that define the flag and that uses these definitions. Let's start at the bottom and work our way up. 
+
+    flag = open('flag.txt').read().strip()
+    
+    ...
+    
+    p=PRNG()
+    
+    with open('flag.enc','w') as f:
+        f.write(encrypt(flag))
+
+flag is a string variable which is simply the contents of some flag.txt. We don't have flag.txt, so it's up to us to reverse engineer the value in the flag variable. p is clearly an instance of PRNG, presumable a Pseudo-Random Number Generator. The file flag.enc is opened, then the `encrypt(s)` is called with the flag and written to flag.enc. If we can find a way reverse the encrypt function, we can apply it to the flag.enc file we were provided to find the original key.
+
+    def encrypt(s):
+        o=''
+        for x in s:
+            o += chr(ord(x) ^ p.next_byte())
+        return o.encode('hex')
+
+This encrypt method is pretty concise. It just loops through every character `x` in a string, calls `p.next_byte()`, and XORs them together. The XOR function (expressed in Python as the `^` operator) is reversible: if we apply `encrypt(s)` to the ciphertext, we will get the original message back. All that remains is to restore the original state of the PRNG.
+
+    class PRNG():
+            def __init__(self):
+                    self.seed = self.getseed()
+                    self.iv = int(bin(self.seed)[2:].zfill(64)[0:32], 2)
+                    self.key = int(bin(self.seed)[2:].zfill(64)[32:64], 2)
+                    self.mask = int(bin(self.seed)[2:].zfill(64)[64:96], 2)
+                    self.aux = 0
+    
+            def parity(self,x):
+                    x ^= x >> 16
+                    x ^= x >> 8
+                    x ^= x>> 4
+                    x ^= x>> 2
+                    x ^= x>> 1
+                    return x & 1
+    
+            def getseed(self):
+                    return int(os.urandom(12).encode('hex'), 16)
+    
+            def LFSR(self):
+                    return self.iv >> 1 | (self.parity(self.iv&self.key) << 32)
+    
+            def next(self):
+                    self.aux, self.iv = self.iv, self.LFSR()
+    
+            def next_byte(self):
+                    x = self.iv ^ self.mask
+                    self.next()
+                    x ^= x >> 16
+                    x ^= x >> 8
+                    return (x & 255)
+
+This is the heart of the problem. The first line of the constructor sets `self.seed = self.getseed()`, which uses `os.urandom(12)` to generate a random 96 bit integer. The constructor then unpacks self.seed into 3 32 bit chunks, which are put into self.iv, self.key, and self.mask. To my knowledge, there is no way for us to guess the random number provided by `os.urandom`, which uses the Operating System's random number generator. This means we have no information whatsoever about the initial values of the IV (Initial Value), Key, and Mask. As far as I can tell, self.aux is irrelevant.
+
+Let's continue reading with `next_byte()`. First x is set to the XOR of IV and Mask. `self.next()` is then called, which presumably changes the state of the PRNG so that the next call to `next_byte()` returns a different value. The last few lines basically XOR different bits of X with itself, like this example with a random x:
+
+    x is a 32 bit integer
+
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
+   |     8 bits    |     8 bits    |     8 bits    |     8 bits    |
+
+    x ^= x >> 16
+    which is the same as:
+    x = x ^ (x >> 16)
+
+   x
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
+   |               |               |               |               |
+   x >> 16
+   |               |               |               |               |
+   |               |                1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0
+   |               |               |               |               |
+   x ^ x >> 16
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
+   |  irrelevant   |  irrelevant   |               |               |
+
+
+   x ^= x >> 8
+   x
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
+   |  irrelevant   |  irrelevant   |               |               |
+   x >> 8
+   |               |               |               |               |
+                    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1
+   |               |  irrelevant   |  irrelevant   |               |
+   x ^ x >> 8
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
+   |  irrelevant   |  irrelevant   |  irrelevant   |               |
+   
+   I have been marking bytes as irrelevant, because the last step is to AND x with 255, which has a convenient value in binary:
+   
+   return x & 255
+   x
+   |               |               |               |               |
+    1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
+   |               |               |               |               |
+   255
+   |               |               |               |               |
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1
+   |               |               |               |               |
+   x ^ 255
+   |               |               |               |               |
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0
+   |               |               |               |               |
+ 
+Essentially, x is folded into itself to reduce it from a 32 bit int to an 8 bit byte. I explicitly went through this process because it will be done again in `parity(x)`. 
+
+OK, back to the `next()` function:
+
+            def parity(self,x):
+                    x ^= x >> 16
+                    x ^= x >> 8
+                    x ^= x>> 4
+                    x ^= x>> 2
+                    x ^= x>> 1
+                    return x & 1
+   
+            ... 
+    
+            def LFSR(self):
+                    return self.iv >> 1 | (self.parity(self.iv&self.key) << 32)
+    
+            def next(self):
+                    self.aux, self.iv = self.iv, self.LFSR()
+    
+`next()` simply sets self.iv to `LFSR()` (and also sets self.aux, but this appears to be irrelevant). `LFSR()` ([Linear-Feedback Shift Register](https://en.wikipedia.org/wiki/Linear-feedback_shift_register)) does some interesting bitwise arithmetic. `parity(x)` is used to employ a similar folding algorithm to the one used above to collapse (IV AND Key) into a single bit. IV is then shifted to the right one bit, then that parity bit is inserted on the far left of the IV. The resulting value is the new IV.
+
+PRNG has a lot of technical things going on, so lets sum up what we know about it. Only the IV ever actually changes; Key and Mask both remain constant. Mask XOR IV is used to garble up the IV before it is used as the next random byte. Key XOR IV is used to garble up the IV before the parity bit is calculated, and IV is shifted to the right by one bit to make room for the parity bit.
+
+This is pretty difficult. We need to determine three different random 32 bit integers before we have any chance of decrypting our flag. Once we have the initial state of the PRNG, we will be set. Unfortunately, the only information we have about the initial state is the encrypted flag:
+
+ab38abdef046216128f8ea76ccfcd38a4a8649802e95f817a2fc945dc04a966d502ef1e31d0a2d
+
+Fortunately, we do know one more thing: the first six characters of the flag. All X-Mas CTF flags are formatted like this: `X-MAS{...}` (which can be hex encoded into `582d4d41537b...7d`). Considering only the very first byte, before any of the shifting occurs, we know that `0x58 XOR collapse_to_8_bits(IV XOR MASK) = 0xab`. Because of how XOR's algebraic properties (`X XOR X = 0`, `X XOR 0 = X`, and `X XOR Y = Y XOR X`), we also know that `collapse_to_8_bits(IV XOR MASK) = 0x58 XOR 0xab = 0xf3`. I am going to handwave my hands around some algebra and assert that `collapse_to_8_bits(IV XOR MASK) = collapse_to_8_bits(IV) XOR collapse_to_8_bits(MASK)`. This allows us to reduce the 32 bit value of MASK to an 8 bit value, MASK8: `MASK8 = collapse_to_8_bits(MASK)`. This ultimately gives us:
+
+    collapse_to_8_bits(IV) XOR MASK8 = 0xf3
+
+Now we stand a chance at determining MASK8.
+
+
 # Santa's List
 
 Logging into the server, we see the following prompt:

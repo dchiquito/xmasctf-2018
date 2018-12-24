@@ -9,7 +9,6 @@ class PRNG():
 		self.key = int(bin(self.seed)[2:].zfill(64)[32:64], 2)
 		self.mask = int(bin(self.seed)[2:].zfill(64)[64:96], 2)
 		self.aux = 0
-		print("intializing ",self.iv, self.key, self.mask, self.aux)
 
 	def parity(self,x):
 		x ^= x >> 16
@@ -41,15 +40,7 @@ def encrypt(s):
 		o += chr(ord(x) ^ p.next_byte())
 	return o.encode('hex')
 
-p = PRNG()
-print(p.next_byte())
+p=PRNG()
 
-
-
-
-
-if False:
-	p=PRNG()
-
-	with open('flag.enc','w') as f:
-		f.write(encrypt(flag))
+with open('flag.enc','w') as f:
+	f.write(encrypt(flag))

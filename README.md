@@ -51,7 +51,7 @@ Just reading the title, we can see a certain acronym looming: PRNG, or Pseudo-Ra
     with open('flag.enc','w') as f:
         f.write(encrypt(flag))
 
-There are three basic parts to this program: the PRNG class which seems to involve a lot of bitwise arithmetic, the encrypt method which seems to encrypt a string, the bits of code that define the flag and that uses these definitions. Let's start at the bottom and work our way up. 
+There are three basic parts to this program: the PRNG class which seems to involve a lot of bitwise arithmetic, the encrypt method which seems to encrypt a string, and the bits of code that define the flag and that uses these definitions. Let's start at the bottom and work our way up. 
 
     flag = open('flag.txt').read().strip()
     
@@ -110,58 +110,58 @@ Let's continue reading with `next_byte()`. First x is set to the XOR of IV and M
 
     x is a 32 bit integer
 
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
-   |     8 bits    |     8 bits    |     8 bits    |     8 bits    |
-
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
+    |     8 bits    |     8 bits    |     8 bits    |     8 bits    |
+    
     x ^= x >> 16
     which is the same as:
     x = x ^ (x >> 16)
+    
+    x
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
+    |               |               |               |               |
+    x >> 16
+    |               |               |               |               |
+    |               |                1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0
+    |               |               |               |               |
+    x ^ x >> 16
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
+    |  irrelevant   |  irrelevant   |               |               |
+    
+    
+    x ^= x >> 8
+    x
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
+    |  irrelevant   |  irrelevant   |               |               |
+    x >> 8
+    |               |               |               |               |
+                     1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1
+    |               |  irrelevant   |  irrelevant   |               |
+    x ^ x >> 8
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
+    |  irrelevant   |  irrelevant   |  irrelevant   |               |
+    
+    I have been marking bytes as irrelevant, because the last step is to AND x with 255, which has a convenient value in binary:
+    
+    return x & 255
+    x
+    |               |               |               |               |
+     1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
+    |               |               |               |               |
+    255
+    |               |               |               |               |
+     0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1
+    |               |               |               |               |
+    x ^ 255
+    |               |               |               |               |
+     0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0
+    |               |               |               |               |
 
-   x
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
-   |               |               |               |               |
-   x >> 16
-   |               |               |               |               |
-   |               |                1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0
-   |               |               |               |               |
-   x ^ x >> 16
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
-   |  irrelevant   |  irrelevant   |               |               |
-
-
-   x ^= x >> 8
-   x
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
-   |  irrelevant   |  irrelevant   |               |               |
-   x >> 8
-   |               |               |               |               |
-                    1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1
-   |               |  irrelevant   |  irrelevant   |               |
-   x ^ x >> 8
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
-   |  irrelevant   |  irrelevant   |  irrelevant   |               |
-   
-   I have been marking bytes as irrelevant, because the last step is to AND x with 255, which has a convenient value in binary:
-   
-   return x & 255
-   x
-   |               |               |               |               |
-    1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
-   |               |               |               |               |
-   255
-   |               |               |               |               |
-    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1
-   |               |               |               |               |
-   x ^ 255
-   |               |               |               |               |
-    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0
-   |               |               |               |               |
- 
 Essentially, x is folded into itself to reduce it from a 32 bit int to an 8 bit byte. I explicitly went through this process because it will be done again in `parity(x)`. 
 
 OK, back to the `next()` function:
@@ -190,11 +190,78 @@ This is pretty difficult. We need to determine three different random 32 bit int
 
 ab38abdef046216128f8ea76ccfcd38a4a8649802e95f817a2fc945dc04a966d502ef1e31d0a2d
 
-Fortunately, we do know one more thing: the first six characters of the flag. All X-Mas CTF flags are formatted like this: `X-MAS{...}` (which can be hex encoded into `582d4d41537b...7d`). Considering only the very first byte, before any of the shifting occurs, we know that `0x58 XOR collapse_to_8_bits(IV XOR MASK) = 0xab`. Because of how XOR's algebraic properties (`X XOR X = 0`, `X XOR 0 = X`, and `X XOR Y = Y XOR X`), we also know that `collapse_to_8_bits(IV XOR MASK) = 0x58 XOR 0xab = 0xf3`. I am going to handwave my hands around some algebra and assert that `collapse_to_8_bits(IV XOR MASK) = collapse_to_8_bits(IV) XOR collapse_to_8_bits(MASK)`. This allows us to reduce the 32 bit value of MASK to an 8 bit value, MASK8: `MASK8 = collapse_to_8_bits(MASK)`. This ultimately gives us:
+Fortunately, we do know one more thing: the first six characters of the flag. All X-Mas CTF flags are formatted like this: `X-MAS{...}` (which can be hex encoded into `582d4d41537b...7d`). Considering only the very first byte, before any of the shifting occurs, we know that:
+
+    0x58 XOR collapse_to_8_bits(IV XOR MASK) = 0xab
+
+Because of how XOR's algebraic properties:
+
+    X XOR X = 0
+    X XOR 0 = X
+    X XOR Y = Y XOR X
+
+We also know that:
+
+    collapse_to_8_bits(IV XOR MASK) = 0x58 XOR 0xab = 0xf3
+
+I am going to handwave my hands around some algebra and assert that:
+
+    collapse_to_8_bits(IV XOR MASK) = collapse_to_8_bits(IV) XOR collapse_to_8_bits(MASK)
+
+This allows us to reduce the 32 bit value of MASK to an 8 bit value, MASK8: `MASK8 = collapse_to_8_bits(MASK)`. This ultimately gives us:
 
     collapse_to_8_bits(IV) XOR MASK8 = 0xf3
 
-Now we stand a chance at determining MASK8.
+It is now sufficient to figure out what MASK8 is instead of the full value of MASK. Let's start by XORing the first 6 bytes of the ciphertext with the first 6 bytes of the flag to get the first 6 bytes produced by the PRNG:
+
+    ab38abdef046 ^ 582d4d41537b = f315e69fa33d
+
+Now let's write out those 6 bytes in a table:
+
+    f3  1 1 1 1 0 0 1 1   collapse_to_8_bits(IV) XOR MASK8
+    15  0 0 0 1 0 1 0 1   collapse_to_8_bits(P1 + IV >> 1) XOR MASK8
+    e6  1 1 1 0 0 1 1 0   collapse_to_8_bits(P2 + P1 + IV >> 2) XOR MASK8
+    9f  1 0 0 1 1 1 1 1   collapse_to_8_bits(P3 + P2 + P1 + IV >> 3) XOR MASK8
+    a3  1 0 1 0 0 0 1 1   collapse_to_8_bits(P4 + P3 + P2 + P1 + IV >> 4) XOR MASK8
+    3d  0 0 1 1 1 1 0 1   collapse_to_8_bits(P5 + P4 + P3 + P2 + P1 + IV >> 5) XOR MASK8
+
+For now we're going to do our best to ignore the parity bits. Because of how X is folded, each new parity bit and IV shift only invalidates the leftmost bit in the table. All the others are strictly dependent on the previous values of IV. I will remove these corrupted bits and add some ASCII formatting to indicate how the bits of IV propogate to the right:
+
+    f3  1 1 1 1 0 0 1 1   IV8 XOR MASK8
+         \ \ \ \ \ \ \
+    15    0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
+           \ \ \ \ \ \ 
+    e6      1 0 0 1 1 0   IV8 >> 2 XOR MASK8
+             \ \ \ \ \ 
+    9f        1 1 1 1 1   IV8 >> 3 XOR MASK8
+               \ \ \ \
+    a3          0 0 1 1   IV8 >> 4 XOR MASK8
+                 \ \ \
+    3d            1 0 1   IV8 >> 5 XOR MASK8
+
+Note that the same MASK8 is applied in each row. The only differentiating factor is how far the IV8 (`collapse_to_8_bits(IV)`) was shifted to the right. This means that each diagonal line represents a single bit of the IV8, while each column is a bit of the MASK8. The value in each cell is IV XOR MASK. 
+We will make an inital assumption that the rightmost (least significant) bit of the MASK8 is 1 (`MASK8[7] = 1`). Looking at the second row in the above table, we can see that `IV8[6] ^ MASK8[7] = 1`, which means `IV8[6] = 0`. Now going back to the first row in the table, we can see that that `IV8[6] ^ MASK8[6] = 1`, which means `MASK8[6] = 1`. We can continue this process back to determine the complete values of both IV8 and MASK8:
+
+    MASK8  1 0 1 1 0 1 1 1
+    
+    IV8    0 1 0 0 0 1 0 0
+    
+    f3     1 1 1 1 0 0 1 1   IV8 XOR MASK8
+            \ \ \ \ \ \ \
+    15       0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
+
+That's awesome! We now know all of the mask that matters, and we have enough of the Initial Value to decrypt the first few values of the flag. However, what about the assumption that the first bit of the mask was 1? What happens if it's 0? We can go ahead and try that:
+
+    MASK8  0 1 0 0 1 0 0 0
+    
+    IV8    1 0 1 1 1 0 1 1
+    
+    f3     1 1 1 1 0 0 1 1   IV8 XOR MASK8
+            \ \ \ \ \ \ \
+    15       0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
+
+It's simply the inverse of the other values we found. Interestingly enough, because the IV and the mask are being XOR'd together, we can safely invert them and still get the same results. We will go with the first result from here one out, but it is just as valid to assume that the first bit is 0.
+
 
 
 # Santa's List

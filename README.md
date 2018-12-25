@@ -110,7 +110,6 @@ Let's continue reading with `next_byte()`. First x is set to the XOR of IV and M
 
     x is a 32 bit integer
 
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
     |     8 bits    |     8 bits    |     8 bits    |     8 bits    |
     
@@ -119,30 +118,24 @@ Let's continue reading with `next_byte()`. First x is set to the XOR of IV and M
     x = x ^ (x >> 16)
     
     x
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 0 0 0 1 1 1 0 1 0 0 0 1 1 0 1 1
     |               |               |               |               |
     x >> 16
-    |               |               |               |               |
     |               |                1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0
     |               |               |               |               |
     x ^ x >> 16
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
     |  irrelevant   |  irrelevant   |               |               |
     
     
     x ^= x >> 8
     x
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1 0 0 1 1 1 0 0 1
     |  irrelevant   |  irrelevant   |               |               |
     x >> 8
-    |               |               |               |               |
                      1 1 0 1 1 1 0 0 0 0 1 0 0 0 1 0 1 1 0 0 0 0 0 1
     |               |  irrelevant   |  irrelevant   |               |
     x ^ x >> 8
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
     |  irrelevant   |  irrelevant   |  irrelevant   |               |
     
@@ -150,15 +143,12 @@ Let's continue reading with `next_byte()`. First x is set to the XOR of IV and M
     
     return x & 255
     x
-    |               |               |               |               |
      1 1 0 1 1 1 0 0 1 1 1 1 1 1 1 0 1 1 1 0 0 0 1 1 1 1 1 1 1 0 0 0
     |               |               |               |               |
     255
-    |               |               |               |               |
      0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1
     |               |               |               |               |
-    x ^ 255
-    |               |               |               |               |
+    x & 255
      0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0 0
     |               |               |               |               |
 
@@ -184,7 +174,7 @@ OK, back to the `next()` function:
     
 `next()` simply sets self.iv to `LFSR()` (and also sets self.aux, but this appears to be irrelevant). `LFSR()` ([Linear-Feedback Shift Register](https://en.wikipedia.org/wiki/Linear-feedback_shift_register)) does some interesting bitwise arithmetic. `parity(x)` is used to employ a similar folding algorithm to the one used above to collapse (IV AND Key) into a single bit. IV is then shifted to the right one bit, then that parity bit is inserted on the far left of the IV. The resulting value is the new IV.
 
-PRNG has a lot of technical things going on, so lets sum up what we know about it. Only the IV ever actually changes; Key and Mask both remain constant. Mask XOR IV is used to garble up the IV before it is used as the next random byte. Key XOR IV is used to garble up the IV before the parity bit is calculated, and IV is shifted to the right by one bit to make room for the parity bit.
+PRNG has a lot of technical things going on, so lets sum up what we know about it. Only the IV ever actually changes; Key and Mask both remain constant. Mask XOR IV is used to garble up the IV before it is used as the next random byte. Key AND IV is used to garble up the IV before the parity bit is calculated, and IV is shifted to the right by one bit to make room for the parity bit.
 
 This is pretty difficult. We need to determine three different random 32 bit integers before we have any chance of decrypting our flag. Once we have the initial state of the PRNG, we will be set. Unfortunately, the only information we have about the initial state is the encrypted flag:
 
@@ -242,26 +232,39 @@ For now we're going to do our best to ignore the parity bits. Because of how X i
 Note that the same MASK8 is applied in each row. The only differentiating factor is how far the IV8 (`collapse_to_8_bits(IV)`) was shifted to the right. This means that each diagonal line represents a single bit of the IV8, while each column is a bit of the MASK8. The value in each cell is IV XOR MASK. 
 We will make an inital assumption that the rightmost (least significant) bit of the MASK8 is 1 (`MASK8[7] = 1`). Looking at the second row in the above table, we can see that `IV8[6] ^ MASK8[7] = 1`, which means `IV8[6] = 0`. Now going back to the first row in the table, we can see that that `IV8[6] ^ MASK8[6] = 1`, which means `MASK8[6] = 1`. We can continue this process back to determine the complete values of both IV8 and MASK8:
 
-    MASK8  1 0 1 1 0 1 1 1
+    b7  1 0 1 1 0 1 1 1   MASK8
     
-    IV8    0 1 0 0 0 1 0 0
+    44  0 1 0 0 0 1 0 0   IV8
     
-    f3     1 1 1 1 0 0 1 1   IV8 XOR MASK8
-            \ \ \ \ \ \ \
-    15       0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
+    f3  1 1 1 1 0 0 1 1   IV8 XOR MASK8
+         \ \ \ \ \ \ \
+    15    0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
 
 That's awesome! We now know all of the mask that matters, and we have enough of the Initial Value to decrypt the first few values of the flag. However, what about the assumption that the first bit of the mask was 1? What happens if it's 0? We can go ahead and try that:
 
-    MASK8  0 1 0 0 1 0 0 0
+    48  0 1 0 0 1 0 0 0   MASK8
     
-    IV8    1 0 1 1 1 0 1 1
+    bb  1 0 1 1 1 0 1 1   IV8
     
-    f3     1 1 1 1 0 0 1 1   IV8 XOR MASK8
-            \ \ \ \ \ \ \
-    15       0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
+    f3  1 1 1 1 0 0 1 1   IV8 XOR MASK8
+         \ \ \ \ \ \ \
+    15    0 0 1 0 1 0 1   IV8 >> 1 XOR MASK8
 
 It's simply the inverse of the other values we found. Interestingly enough, because the IV and the mask are being XOR'd together, we can safely invert them and still get the same results. We will go with the first result from here one out, but it is just as valid to assume that the first bit is 0.
 
+Now, how to determine the value of KEY so we can calculate the parity bits? In short, I don't think it's possible. We know what IV8 is, but we need determine the original IV to combine it properly with they KEY. There are 8 different combinations of bits IV that shuffle into each bit of IV8, which means there are 64 different possible IVs. For each of these IVs, 31 bits in the KEY are completely arbitrary; we can choose the last bit in the KEY such that `parity(IV & KEY) = known_value`. And we only know 6 parity values, one for each time we applied `next()` and shifted the IV to the right. There are simply too many possibilities and too little information to solve this in a tractable way.
+
+Fortunately, we can actually determine the parity bit at each phase without knowing the KEY. The parity bit is always inserted at the highest bit of the IV, so only the highest bit of IV8 is affected. Interestingly, ASCII characters all have decimal values between 32 and 127, or 00100000 and 01111111. This means that the highest bit in each character of the flag is ALWAYS 0. Therefore, for every byte, we have:
+
+    PARITY_BIT[0] ^ 0 = CIPHERTEXT[0]
+    PARITY_BIT[0] = CIPHERTEXT[0]
+
+The only reason we needed to know the real value of IV is to calculate the parity using KEY. Now that we have this shortcut, it is enough to pick any value of IV that will collapse to IV8. For our final solution code, we will choose the simplest value of `0x00000044`. We will modify `self.mask` to `self.mask8` and change the algorithm so that the mask is applied after collapsing the IV. We will also modify PRNG to accept the next byte of ciphertext when calculating `next_byte()`, and modify `parity(x)` to this:
+
+    def parity(self, c):
+        return (c >> 31) & 1
+
+My final solution code is included in `goodies/goodies_solve.py`.
 
 
 # Santa's List

@@ -1,72 +1,59 @@
-import os
 
-flag = open('flag.txt').read().strip()
+flag_enc_hex = open('flag.enc').read().strip()
+
+flag_enc = flag_enc_hex.decode("hex")
+flag_initial = "X-MAS{"
+flag_initial_hex = flag_initial.encode("hex")
+
+flag_xor = ""
+for i in range(0,len(flag_initial)):
+    flag_xor += chr(ord(flag_initial[i]) ^ ord(flag_enc[i]))
+
+
+print flag_enc_hex[:12] + " ^ " + "X-MAS{".encode("hex")[2:] + " = " + flag_xor.encode("hex")[2:]
+
+
 
 class PRNG():
-	def __init__(self):
-		self.seed = self.getseed()
-		#self.iv = int(bin(self.seed)[2:].zfill(64)[0:32], 2)
-		# I had to tune this manually until it worked. Started at the end and worked backwards.
-		self.iv =   int('00011100'+'10011110'+'11001110'+'01110101'+'11110001'+'00000000'+'00000000'+'00000000'+'01000100',2)
-		#self.key = int(bin(self.seed)[2:].zfill(64)[32:64], 2)
-		self.key =  int('00000000',2)
-		#self.mask = int(bin(self.seed)[2:].zfill(64)[64:96], 2)
-		self.mask = int('10110111',2)
-		self.aux = 0
-		print("intializing ",self.iv, self.key, self.mask, self.aux)
+    def __init__(self):
+        print "Using manually determined values for IV and MASK:"
+        print "IV = 0x44"
+        print "MASK = 0xb7"
+        self.iv = int("44", 16)
+        self.mask8 = int("b7", 16)
 
-	def parity(self,x):
-		x ^= x >> 16
-		x ^= x >> 8
-		x ^= x>> 4
-		x ^= x>> 2
-		x ^= x>> 1
-		return x & 1
-	
-	def getseed(self):
-		return int(os.urandom(12).encode('hex'), 16)
-	
-	def LFSR(self):
-		return self.iv >> 1 | (self.parity(self.iv&self.key) << 32)
-	
-	def next(self):
-		self.aux, self.iv = self.iv, self.LFSR()
-	
-	def next_byte(self):
-		#print "iv\t\t",format(self.iv, 'b').zfill(32)
-		#x = self.iv ^ self.mask
-		x = self.iv & 0xffffffff
-		self.next()
-		x ^= x >> 16
-		x ^= x >> 8
-		#print "x\t",format(x&255, 'b').zfill(8)
-		return (x & 255)
+    # Parity bit is the most significant bit of the next byte of ciphertext
+    def parity(self, next_cipher_byte):
+        return ((next_cipher_byte >> 7) ^ 1) & 1
 
-def encrypt(s):
-	o=''
-	for x in s:
-		o += chr(ord(x) ^ p.next_byte())
-	return o.encode('hex')
-def demask(s):
-	o=''
-	for x in s:
-		o += chr(ord(x) ^ p.mask)
-	return o
+    # Linear-Feedback Shift Register inserts the parity bit on the left of the IV, after shifting IV 1 bit to the right to make room for it
+    def LFSR(self, next_cipher_byte):
+        return self.iv >> 1 | (self.parity(next_cipher_byte) << 7)
 
-p = PRNG()
-enc = demask(open('flag_og.enc').read().strip().decode('hex'))
-print(enc)
-dec = encrypt(enc).decode('hex')
-print(dec)
-guess = "X-MAS{67812345678123456781234567812345}"
-for i in range(0,len(dec)):
-	# To be an ascii character, it must be in range [32..127], so the highest bit is always 0
-	# also we know the first 6 bytes are 'X-MAS{' so that narrows down the initial value and lets us determine the mask
-	print dec[i],"\t",guess[i],"\t",format(ord(dec[i]), 'b').zfill(8), "\t", ((i-1)%8)+1
-print dec
+    # Advances the state of the PRNG
+    def next(self, next_cipher_byte):
+        self.iv = self.LFSR(next_cipher_byte)
 
-if False:
-	p=PRNG()
+    # Get's the next byte of the pseudo-random number stream
+    def next_byte(self, next_cipher_byte):
+        x = self.iv
+        x ^= x >> 16
+        x ^= x >> 8
+	x &= 255
+	x ^= self.mask8
+        self.next(next_cipher_byte)
+        return x
 
-	with open('flag.enc','w') as f:
-		f.write(encrypt(flag))
+# Decrypts a string s
+def decrypt(s):
+    o=''
+    for i in range(0,len(s)-1):
+        o += chr(ord(s[i]) ^ p.next_byte(ord(s[i+1])))
+    # decrypt one last character with an empty next_cipher_byte to get the last character of ciphertext
+    o += chr(ord(s[-1]) ^ p.next_byte(0))
+    return o
+
+p=PRNG()
+
+print decrypt(flag_enc_hex.decode("hex"))
+

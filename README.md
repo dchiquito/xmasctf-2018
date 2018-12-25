@@ -104,7 +104,7 @@ This encrypt method is pretty concise. It just loops through every character `x`
                     x ^= x >> 8
                     return (x & 255)
 
-This is the heart of the problem. The first line of the constructor sets `self.seed = self.getseed()`, which uses `os.urandom(12)` to generate a random 96 bit integer. The constructor then unpacks self.seed into 3 32 bit chunks, which are put into self.iv, self.key, and self.mask. To my knowledge, there is no way for us to guess the random number provided by `os.urandom`, which uses the Operating System's random number generator. This means we have no information whatsoever about the initial values of the IV (Initial Value), Key, and Mask. As far as I can tell, self.aux is irrelevant.
+This is the heart of the challenge. The first line of the constructor sets `self.seed = self.getseed()`, which uses `os.urandom(12)` to generate a random 96 bit integer. The constructor then unpacks self.seed into 3 32 bit chunks, which are put into self.iv, self.key, and self.mask. To my knowledge, there is no way for us to guess the random number provided by `os.urandom`, which uses the Operating System's random number generator. This means we have no information whatsoever about the initial values of the IV (Initial Value), KEY, and MASK. As far as I can tell, self.aux is irrelevant.
 
 Let's continue reading with `next_byte()`. First x is set to the XOR of IV and Mask. `self.next()` is then called, which presumably changes the state of the PRNG so that the next call to `next_byte()` returns a different value. The last few lines basically XOR different bits of X with itself, like this example with a random x:
 
@@ -172,13 +172,13 @@ OK, back to the `next()` function:
             def next(self):
                     self.aux, self.iv = self.iv, self.LFSR()
     
-`next()` simply sets self.iv to `LFSR()` (and also sets self.aux, but this appears to be irrelevant). `LFSR()` ([Linear-Feedback Shift Register](https://en.wikipedia.org/wiki/Linear-feedback_shift_register)) does some interesting bitwise arithmetic. `parity(x)` is used to employ a similar folding algorithm to the one used above to collapse (IV AND Key) into a single bit. IV is then shifted to the right one bit, then that parity bit is inserted on the far left of the IV. The resulting value is the new IV.
+`next()` simply sets self.iv to `LFSR()` (and also sets self.aux, but this appears to be irrelevant). `LFSR()` ([Linear-Feedback Shift Register](https://en.wikipedia.org/wiki/Linear-feedback_shift_register)) does some interesting bitwise arithmetic. `parity(x)` is used to employ a similar folding algorithm to the one used above to collapse (IV AND KEY) into a single bit. IV is then shifted to the right one bit, then that parity bit is inserted on the far left of the IV. The resulting value is the new IV.
 
-PRNG has a lot of technical things going on, so lets sum up what we know about it. Only the IV ever actually changes; Key and Mask both remain constant. Mask XOR IV is used to garble up the IV before it is used as the next random byte. Key AND IV is used to garble up the IV before the parity bit is calculated, and IV is shifted to the right by one bit to make room for the parity bit.
+PRNG has a lot of technical things going on, so lets sum up what we know about it. Only the IV ever actually changes; KEY and MASK both remain constant. Mask XOR IV is used to garble up the IV before it is used as the next random byte. KEY AND IV is used to garble up the IV before the parity bit is calculated, and IV is shifted to the right by one bit to make room for the parity bit.
 
 This is pretty difficult. We need to determine three different random 32 bit integers before we have any chance of decrypting our flag. Once we have the initial state of the PRNG, we will be set. Unfortunately, the only information we have about the initial state is the encrypted flag:
 
-ab38abdef046216128f8ea76ccfcd38a4a8649802e95f817a2fc945dc04a966d502ef1e31d0a2d
+    ab38abdef046216128f8ea76ccfcd38a4a8649802e95f817a2fc945dc04a966d502ef1e31d0a2d
 
 Fortunately, we do know one more thing: the first six characters of the flag. All X-Mas CTF flags are formatted like this: `X-MAS{...}` (which can be hex encoded into `582d4d41537b...7d`). Considering only the very first byte, before any of the shifting occurs, we know that:
 
@@ -259,12 +259,14 @@ Fortunately, we can actually determine the parity bit at each phase without know
     PARITY_BIT[0] ^ 0 = CIPHERTEXT[0]
     PARITY_BIT[0] = CIPHERTEXT[0]
 
-The only reason we needed to know the real value of IV is to calculate the parity using KEY. Now that we have this shortcut, it is enough to pick any value of IV that will collapse to IV8. For our final solution code, we will choose the simplest value of `0x00000044`. We will modify `self.mask` to `self.mask8` and change the algorithm so that the mask is applied after collapsing the IV. We will also modify PRNG to accept the next byte of ciphertext when calculating `next_byte()`, and modify `parity(x)` to this:
+The only reason we needed to know the real value of IV is to calculate the parity using KEY. Now that we have this shortcut, we can just use the 8-bit byte values for IV and MASK. We will need to change the algorithm so that IV is not collapsed at all. We will also modify PRNG to accept the next byte of ciphertext when calculating `next_byte()`, and modify `parity(x)` to this:
 
     def parity(self, c):
-        return (c >> 31) & 1
+        return (c >> 7) & 1
 
-My final solution code is included in `goodies/goodies_solve.py`.
+My final solution code is included in `goodies/goodies_solve.py`. Running that will give you the flag:
+
+    X-MAS{S4n7a_4lw4ys_g1ve5_n1c3_pr3s3n7s}
 
 
 # Santa's List
